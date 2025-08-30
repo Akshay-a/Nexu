@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
@@ -14,20 +14,38 @@ const Stack = createStackNavigator<RootStackParamList>();
 
 const AppNavigator: React.FC = () => {
   const { isAuthenticated, isLoading, hasSeenOnboarding } = useAuth();
+  const [forceShowApp, setForceShowApp] = useState(false);
+  
+  // Safety mechanism: if loading takes too long, force show the app
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (isLoading) {
+        console.warn('⚠️ Loading timeout reached, forcing app to show');
+        setForceShowApp(true);
+      }
+    }, 5000); // 5 second timeout - reduced since auth is optimized
+    
+    return () => clearTimeout(timeout);
+  }, [isLoading]);
 
   console.log('🧭 Navigator state:', {
     isAuthenticated: isAuthenticated,
     isLoading: isLoading,
-    hasSeenOnboarding: hasSeenOnboarding
+    hasSeenOnboarding: hasSeenOnboarding,
+    forceShowApp: forceShowApp
   });
   
+  const shouldShowLoading = isLoading && !forceShowApp;
+  const shouldShowOnboarding = !hasSeenOnboarding && (!isLoading || forceShowApp);
+  const shouldShowMain = hasSeenOnboarding && (!isLoading || forceShowApp);
+  
   console.log('🧭 Navigator decision:', {
-    showLoading: isLoading,
-    showOnboarding: !hasSeenOnboarding && !isLoading,
-    showMain: hasSeenOnboarding && !isLoading
+    showLoading: shouldShowLoading,
+    showOnboarding: shouldShowOnboarding,
+    showMain: shouldShowMain
   });
 
-  if (isLoading) {
+  if (shouldShowLoading) {
     return <LoadingScreen />;
   }
 
@@ -35,7 +53,7 @@ const AppNavigator: React.FC = () => {
     <NavigationContainer>
       <StatusBar style="auto" />
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!hasSeenOnboarding ? (
+        {shouldShowOnboarding ? (
           <Stack.Screen name="Onboarding" component={OnboardingScreen} />
         ) : (
           <>
