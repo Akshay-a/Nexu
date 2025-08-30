@@ -32,6 +32,11 @@ export type RootStackParamList = {
   Onboarding: undefined;
   Main: undefined;
   Auth: undefined;
+  Chat: {
+    chatGroupId: string;
+    chatName: string;
+    memberCount?: number;
+  };
 };
 
 export type MainTabParamList = {
@@ -46,4 +51,26 @@ export interface ChatPin {
   memberCount: number;
   description?: string;
   distance?: string;
+}
+
+export interface Message {
+  id: string;
+  chat_group_id: string;
+  content: string;
+  sent_at: string;
+  sender_type: 'user' | 'anonymous';
+  user_id: string | null;
+  anonymous_user_id: string | null;
+  display_name: string;
+  avatar_color: string | null;
+  message_type: 'text' | 'poll';
+  poll_data: any | null;
+}
+
+export interface ChatMemberInfo {
+  id: string;
+  displayName: string;
+  avatarColor: string;
+  isOnline?: boolean;
+  lastSeen?: string;
 }
