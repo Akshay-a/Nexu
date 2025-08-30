@@ -32,27 +32,42 @@ export const useAuth = () => {
     user: null,
   });
   const [hasSeenOnboarding, setHasSeenOnboardingState] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
+    // Prevent multiple initializations
+    if (initialized) {
+      console.log('🔄 Auth already initialized, skipping...');
+      return;
+    }
+
     let isMounted = true;
     let initializationTimeout: NodeJS.Timeout;
     
     const initializeAuth = async () => {
+      setInitialized(true);
+      
       console.log('🔄 Starting auth initialization...');
       
       try {
         // Setting timeout to prevent infinite loading and make user experience easy
-        initializationTimeout = setTimeout(() => {
+        initializationTimeout = setTimeout(async () => {
           if (isMounted) {
             console.warn('⚠️ Auth initialization timeout - forcing completion');
+            // Make sure we still check onboarding even if auth times out
+            try {
+              const seenOnboarding = await getHasSeenOnboarding();
+              setHasSeenOnboardingState(seenOnboarding);
+            } catch (e) {
+              console.warn('⚠️ Failed to check onboarding status during timeout');
+            }
             setAuthState({
               isAuthenticated: false,
               isLoading: false,
               user: null,
             });
-            setHasSeenOnboardingState(false);
           }
-        }, 3000); // 3 second timeout - should be faster now
+        }, 2000); // Reduced timeout for better UX
         
         // Step 1: Check onboarding status (local storage only)
         console.log('📋 Checking onboarding status...');
@@ -110,12 +125,20 @@ export const useAuth = () => {
         if (initializationTimeout) clearTimeout(initializationTimeout);
         
         // Always set loading to false so app can continue
+        // Try to preserve onboarding state even on error
+        try {
+          const seenOnboarding = await getHasSeenOnboarding();
+          setHasSeenOnboardingState(seenOnboarding);
+        } catch (onboardingError) {
+          console.warn('⚠️ Failed to check onboarding status during error fallback');
+          setHasSeenOnboardingState(false);
+        }
+        
         setAuthState({
           isAuthenticated: false,
           isLoading: false,
           user: null,
         });
-        setHasSeenOnboardingState(false);
         console.log('✅ Auth initialization fallback complete - Loading: false');
       }
     };
@@ -168,7 +191,7 @@ export const useAuth = () => {
       if (initializationTimeout) clearTimeout(initializationTimeout);
       subscription.unsubscribe();
     };
-  }, []);
+  }, [initialized]); // Dependency on initialized to prevent multiple runs
 
   const completeOnboarding = async () => {
     await setHasSeenOnboarding();
