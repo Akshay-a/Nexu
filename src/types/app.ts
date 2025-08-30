@@ -44,4 +44,6 @@ export interface ChatPin {
   coordinate: Location;
   title: string;
   memberCount: number;
+  description?: string;
+  distance?: string;
 }
