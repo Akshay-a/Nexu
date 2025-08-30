@@ -15,6 +15,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/app';
 import { useAuth } from '../hooks/useAuth';
 import { getOrCreateAnonymousUser } from '../services/anonymousUser';
+import { getActiveJoinedChats, leaveChat, JoinedChat } from '../services/userParticipation';
 
 type ChatListNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -34,80 +35,156 @@ const ChatListScreen: React.FC = () => {
   const [anonymousName, setAnonymousName] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [chats, setChats] = useState<ChatItem[]>([]);
+  const [joinedChats, setJoinedChats] = useState<JoinedChat[]>([]);
+
+  console.log('💬 ChatListScreen state:', { 
+    isAuthenticated,
+    anonymousName,
+    chatsCount: chats.length,
+    joinedChatsCount: joinedChats.length,
+    hasSearchQuery: !!searchQuery
+  });
 
   useEffect(() => {
+    console.log('💬 ChatListScreen mounted');
+    
     const initializeAnonymousUser = async () => {
+      console.log('🎭 ChatListScreen: Initializing anonymous user...');
       try {
         const anonymousUser = await getOrCreateAnonymousUser();
+        console.log('✅ ChatListScreen: Anonymous user loaded:', anonymousUser.generated_name);
         setAnonymousName(anonymousUser.generated_name);
       } catch (error) {
-        console.error('Failed to initialize anonymous user:', error);
+        console.error('❌ ChatListScreen: Failed to initialize anonymous user:', error);
+        setAnonymousName('Unknown User');
       }
     };
 
     initializeAnonymousUser();
+    
+    return () => {
+      console.log('👋 ChatListScreen unmounted');
+    };
   }, []);
 
+  // Load joined chats from user participation
   useEffect(() => {
-    const mockChats: ChatItem[] = [
-      {
-        id: '1',
-        title: 'Library Study Group',
-        lastMessage: 'Anyone got notes for CS101? Need help with the assignment...',
-        memberCount: 23,
-        distance: '150m away',
-        timeAgo: '2 min ago',
-        status: 'live',
-      },
-      {
-        id: '2',
-        title: 'Campus Events',
-        lastMessage: 'Concert tonight at the quad! Who\'s going?',
-        memberCount: 67,
-        distance: '300m away',
-        timeAgo: '5 min ago',
-        status: 'active',
-      },
-      {
-        id: '3',
-        title: 'Lost & Found',
-        lastMessage: 'Found AirPods near the library entrance',
-        memberCount: 8,
-        distance: '200m away',
-        timeAgo: '12 min ago',
-        status: 'active',
-      },
-      {
-        id: '4',
-        title: 'Cafeteria Chat',
-        lastMessage: 'What\'s good on the menu today?',
-        memberCount: 12,
-        distance: '80m away',
-        timeAgo: '25 min ago',
-        status: 'quiet',
-      },
-    ];
-    setChats(mockChats);
+    const loadJoinedChats = async () => {
+      try {
+        const joined = await getActiveJoinedChats();
+        setJoinedChats(joined);
+        
+        // Convert joined chats to ChatItem format for display
+        const chatItems: ChatItem[] = joined.map(chat => ({
+          id: chat.id,
+          title: chat.name,
+          lastMessage: 'You joined this chat', // TODO: Get actual last message
+          memberCount: Math.floor(Math.random() * 50) + 5, // TODO: Get real member count
+          distance: 'Nearby', // TODO: Calculate current distance
+          timeAgo: formatTimeAgo(chat.lastActivity),
+          status: 'active' as const,
+        }));
+        
+        setChats(chatItems);
+        console.log(`💬 Loaded ${joined.length} joined chats`);
+      } catch (error) {
+        console.error('❌ Failed to load joined chats:', error);
+        // Fallback to empty state
+        setChats([]);
+      }
+    };
+
+    loadJoinedChats();
   }, []);
+  
+  // Helper function to format time ago
+  const formatTimeAgo = (isoString: string): string => {
+    const now = new Date();
+    const date = new Date(isoString);
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} min ago`;
+    if (diffMins < 1440) return `${Math.floor(diffMins / 60)} hr ago`;
+    return `${Math.floor(diffMins / 1440)} day ago`;
+  };
 
   const handleCreateChat = () => {
+    console.log('➕ Create chat button pressed');
+    
     if (!isAuthenticated) {
+      console.log('🔐 User not authenticated, showing sign up prompt');
       Alert.alert(
         'Sign Up Required',
         'You need to sign up to create chats. You can still join existing chats anonymously.',
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Sign Up', onPress: () => navigation.navigate('Auth') },
+          { 
+            text: 'Cancel', 
+            style: 'cancel',
+            onPress: () => console.log('❌ User cancelled sign up prompt')
+          },
+          { 
+            text: 'Sign Up', 
+            onPress: () => {
+              console.log('🧭 Navigating to Auth screen from ChatList');
+              navigation.navigate('Auth');
+            }
+          },
         ]
       );
       return;
     }
     
+    console.log('ℹ️ Showing coming soon alert for chat creation');
     Alert.alert('Coming Soon', 'Chat creation will be available soon!');
   };
 
   const handleChatPress = (chat: ChatItem) => {
+    console.log('💬 Chat pressed:', { chatId: chat.id, title: chat.title });
     Alert.alert('Coming Soon', 'Chat rooms will be available soon!');
+  };
+  
+  const handleChatLongPress = (chat: ChatItem) => {
+    console.log('💬 Chat long pressed:', { chatId: chat.id, title: chat.title });
+    Alert.alert(
+      'Leave Chat',
+      `Do you want to leave "${chat.title}"? You can always rejoin from the map.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Leave', 
+          style: 'destructive',
+          onPress: () => handleLeaveChat(chat.id) 
+        },
+      ]
+    );
+  };
+  
+  const handleLeaveChat = async (chatId: string) => {
+    try {
+      await leaveChat(chatId);
+      
+      // Refresh the chat list
+      const joined = await getActiveJoinedChats();
+      setJoinedChats(joined);
+      
+      const chatItems: ChatItem[] = joined.map(chat => ({
+        id: chat.id,
+        title: chat.name,
+        lastMessage: 'You joined this chat',
+        memberCount: Math.floor(Math.random() * 50) + 5,
+        distance: 'Nearby',
+        timeAgo: formatTimeAgo(chat.lastActivity),
+        status: 'active' as const,
+      }));
+      
+      setChats(chatItems);
+      console.log('✅ Successfully left chat and updated list');
+    } catch (error) {
+      console.error('❌ Failed to leave chat:', error);
+      Alert.alert('Error', 'Failed to leave chat. Please try again.');
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -164,6 +241,7 @@ const ChatListScreen: React.FC = () => {
               key={chat.id}
               style={styles.chatItem}
               onPress={() => handleChatPress(chat)}
+              onLongPress={() => handleChatLongPress(chat)}
             >
               <View style={styles.chatHeader}>
                 <Text style={styles.chatTitle}>{chat.title}</Text>
@@ -189,8 +267,16 @@ const ChatListScreen: React.FC = () => {
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateIcon}>💬</Text>
             <Text style={styles.emptyStateText}>
-              {searchQuery ? 'No chats match your search' : 'No active chats nearby'}
+              {searchQuery 
+                ? 'No chats match your search' 
+                : 'No joined chats yet'
+              }
             </Text>
+            {!searchQuery && (
+              <Text style={styles.emptyStateSubtext}>
+                Go to the Discover tab to find and join nearby chats!
+              </Text>
+            )}
           </View>
         )}
       </ScrollView>
@@ -352,6 +438,14 @@ const styles = StyleSheet.create({
     color: '#19323C',
     opacity: 0.6,
     textAlign: 'center',
+    marginBottom: 8,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: '#19323C',
+    opacity: 0.5,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
 
