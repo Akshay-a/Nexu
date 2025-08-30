@@ -235,7 +235,7 @@ const MapScreen: React.FC = () => {
   );
 
   const renderActivityView = () => (
-    <View style={styles.activityView}>
+    <>
       {loadingGroups ? (
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Finding nearby chats...</Text>
@@ -304,7 +304,7 @@ const MapScreen: React.FC = () => {
           ))}
         </ScrollView>
       )}
-    </View>
+    </>
   );
 
   if (!hasPermission) {
@@ -333,26 +333,34 @@ const MapScreen: React.FC = () => {
       {renderDiscoveryHeader()}
       
       <View style={styles.content}>
-        {viewMode === 'map' ? (
-          <View style={styles.mapViewContainer}>
-            <MapComponent
-              location={location}
-              chatPins={chatPins}
-              onPinPress={handlePinPress}
-            />
-            
-            {/* Status overlay for map */}
-            {loadingGroups && (
-              <View style={styles.mapStatusOverlay}>
-                <View style={styles.statusBadge}>
-                  <Text style={styles.statusText}>Finding chats...</Text>
-                </View>
+        {/* Map View - Always mounted but shown/hidden with display style */}
+        <View style={[
+          styles.mapViewContainer, 
+          { display: viewMode === 'map' ? 'flex' : 'none' }
+        ]}>
+          <MapComponent
+            location={location}
+            chatPins={chatPins}
+            onPinPress={handlePinPress}
+          />
+          
+          {/* Status overlay for map */}
+          {loadingGroups && (
+            <View style={styles.mapStatusOverlay}>
+              <View style={styles.statusBadge}>
+                <Text style={styles.statusText}>Finding chats...</Text>
               </View>
-            )}
-          </View>
-        ) : (
-          renderActivityView()
-        )}
+            </View>
+          )}
+        </View>
+        
+        {/* Activity View - Always mounted but shown/hidden with display style */}
+        <View style={[
+          styles.activityView, 
+          { display: viewMode === 'activity' ? 'flex' : 'none' }
+        ]}>
+          {renderActivityView()}
+        </View>
       </View>
     </SafeAreaView>
   );
