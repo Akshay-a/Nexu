@@ -7,6 +7,7 @@ import { RootStackParamList } from '../types/app';
 import OnboardingScreen from '../screens/OnboardingScreen';
 import MainTabNavigator from './MainTabNavigator';
 import AuthScreen from '../screens/AuthScreen';
+import ChatScreen from '../screens/ChatScreen';
 import { useAuth } from '../hooks/useAuth';
 import LoadingScreen from '../screens/LoadingScreen';
 
@@ -73,6 +74,14 @@ const AppNavigator: React.FC = () => {
           name="Auth" 
           component={AuthScreen}
           options={{ presentation: 'modal' }}
+        />
+        <Stack.Screen 
+          name="Chat" 
+          component={ChatScreen}
+          options={{ 
+            headerShown: false,
+            gestureEnabled: true,
+          }}
         />
       </Stack.Navigator>
     </NavigationContainer>

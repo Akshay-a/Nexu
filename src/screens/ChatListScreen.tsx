@@ -142,7 +142,13 @@ const ChatListScreen: React.FC = () => {
 
   const handleChatPress = (chat: ChatItem) => {
     console.log('💬 Chat pressed:', { chatId: chat.id, title: chat.title });
-    Alert.alert('Coming Soon', 'Chat rooms will be available soon!');
+    
+    // Navigate to the chat screen
+    navigation.navigate('Chat', {
+      chatGroupId: chat.id,
+      chatName: chat.title,
+      memberCount: chat.memberCount
+    });
   };
   
   const handleChatLongPress = (chat: ChatItem) => {

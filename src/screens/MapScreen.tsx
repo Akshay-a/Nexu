@@ -16,13 +16,17 @@ import { RootStackParamList, Location, ChatPin } from '../types/app';
 import { useLocation } from '../hooks/useLocation';
 import { useAuth } from '../hooks/useAuth';
 import { getOrCreateAnonymousUser } from '../services/anonymousUser';
-import { getNearbyChatsGroups, ChatGroup } from '../services/chatGroups';
+import { getNearbyChatsGroups, ChatGroup, testDatabaseConnection } from '../services/chatGroups';
 import { joinChat, trackChatVisit } from '../services/userParticipation';
 import MapComponent from '../components/MapComponent';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type MapNavigationProp = StackNavigationProp<RootStackParamList>;
 
 type ViewMode = 'map' | 'activity';
+
+const NEARBY_GROUPS_CACHE_KEY = 'nexu_nearby_groups_cache';
+const CACHE_EXPIRY_HOURS = 24;
 
 const MapScreen: React.FC = () => {
   const navigation = useNavigation<MapNavigationProp>();
@@ -33,75 +37,31 @@ const MapScreen: React.FC = () => {
   const [nearbyGroups, setNearbyGroups] = useState<ChatGroup[]>([]);
   const [loadingGroups, setLoadingGroups] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('map');
+  const [joiningChatId, setJoiningChatId] = useState<string | null>(null);
 
-  console.log('🗺️ MapScreen state:', { 
-    hasPermission, 
-    location: location ? 'Available' : 'Loading...', 
+  console.log('🗺️ MapScreen state:', {
+    hasPermission,
+    location: location ? 'Available' : 'Loading...',
     isAuthenticated,
-    anonymousName 
+    anonymousName
   });
 
+  // Load cached groups on component mount
   useEffect(() => {
-    const initializeAnonymousUser = async () => {
-      console.log('🎭 MapScreen: Initializing anonymous user...');
+    const loadCachedGroups = async () => {
       try {
-        const startTime = Date.now();
-        const anonymousUser = await getOrCreateAnonymousUser();
-        const endTime = Date.now();
-        
-        console.log('✅ MapScreen: Anonymous user initialized:', {
-          name: anonymousUser.generated_name,
-          deviceId: anonymousUser.device_id,
-          timeTaken: `${endTime - startTime}ms`,
-          isExisting: !!anonymousUser.last_seen
-        });
-        
-        setAnonymousName(anonymousUser.generated_name);
-        
-        // Test persistence by logging current state
-        console.log('🔍 MapScreen: Anonymous user state summary:', {
-          displayName: anonymousUser.generated_name,
-          persistenceCheck: 'Will be validated on next app restart'
-        });
-      } catch (error) {
-        console.error('❌ MapScreen: Failed to initialize anonymous user:', error);
-        setAnonymousName('Unknown User');
-      }
-    };
+        const cached = await AsyncStorage.getItem(NEARBY_GROUPS_CACHE_KEY);
+        if (cached) {
+          const { groups, timestamp } = JSON.parse(cached);
+          const cacheAge = Date.now() - timestamp;
+          const maxAge = CACHE_EXPIRY_HOURS * 60 * 60 * 1000; // 24 hours in milliseconds
 
-    initializeAnonymousUser();
-  }, []);
-
-  // Fetch nearby chat groups when location is available (with debouncing)
-  const lastFetchLocationRef = useRef<{ lat: number; lng: number; time: number } | null>(null);
-  
-  useEffect(() => {
-    if (location) {
-      const currentTime = Date.now();
-      
-      // Debounce group fetching - only fetch if location changed significantly or enough time passed
-      const shouldFetch = !lastFetchLocationRef.current || 
-        Math.abs(lastFetchLocationRef.current.lat - location.latitude) > 0.001 ||
-        Math.abs(lastFetchLocationRef.current.lng - location.longitude) > 0.001 ||
-        (currentTime - lastFetchLocationRef.current.time) > 30000; // 30 seconds minimum
-      
-      if (shouldFetch) {
-        const fetchNearbyGroups = async () => {
-          console.log('🔍 Fetching nearby chat groups for location:', location);
-          setLoadingGroups(true);
-          
-          try {
-            const groups = await getNearbyChatsGroups(location, 5); // 5km radius
+          if (cacheAge < maxAge && groups.length > 0) {
+            console.log('📦 Loading cached nearby groups:', groups.length);
             setNearbyGroups(groups);
-            
-            lastFetchLocationRef.current = {
-              lat: location.latitude,
-              lng: location.longitude,
-              time: currentTime
-            };
-            
-            // Convert groups to ChatPin format for map display
-            const pins: ChatPin[] = groups.map(group => ({
+
+            // Convert to pins
+            const pins: ChatPin[] = groups.map((group: ChatGroup) => ({
               id: group.id,
               coordinate: {
                 latitude: group.lat,
@@ -112,21 +72,187 @@ const MapScreen: React.FC = () => {
               description: group.description,
               distance: group.distance ? `${group.distance.toFixed(1)}km away` : undefined,
             }));
-            
             setChatPins(pins);
-            console.log(`✅ Loaded ${pins.length} nearby chat groups on map`);
-          } catch (error) {
-            console.error('❌ Failed to fetch nearby groups:', error);
-            // Fallback to empty array
-            setChatPins([]);
-          } finally {
-            setLoadingGroups(false);
+          } else {
+            console.log('⏰ Cache expired, will fetch fresh data');
           }
-        };
-
-        fetchNearbyGroups();
+        }
+      } catch (error) {
+        console.error('❌ Failed to load cached groups:', error);
       }
+    };
+
+    loadCachedGroups();
+  }, []);
+
+  useEffect(() => {
+    const initializeAnonymousUser = async () => {
+      console.log('🎭 [ANONYMOUS INIT START] MapScreen: Initializing anonymous user...');
+      try {
+        const startTime = Date.now();
+        const anonymousUser = await getOrCreateAnonymousUser();
+        const endTime = Date.now();
+
+        console.log('✅ [ANONYMOUS INIT SUCCESS] Anonymous user initialized:', {
+          name: anonymousUser.generated_name,
+          deviceId: anonymousUser.device_id,
+          timeTaken: `${endTime - startTime}ms`,
+          isExisting: !!anonymousUser.last_seen,
+          fullUserData: anonymousUser
+        });
+
+        setAnonymousName(anonymousUser.generated_name);
+
+        // Test persistence by logging current state
+        console.log('🔍 [ANONYMOUS STATE] Anonymous user state summary:', {
+          displayName: anonymousUser.generated_name,
+          deviceId: anonymousUser.device_id,
+          persistenceCheck: 'Will be validated on next app restart'
+        });
+      } catch (error) {
+        console.error('❌ [ANONYMOUS INIT FAILED] Failed to initialize anonymous user:', error);
+        setAnonymousName('Unknown User');
+      }
+    };
+
+    initializeAnonymousUser();
+  }, []);
+
+  // Fetch nearby chat groups when location is available (with improved debouncing)
+  const lastFetchLocationRef = useRef<{ lat: number; lng: number; time: number } | null>(null);
+  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Function to calculate if location change is significant (about 200 meters)
+  const isSignificantLocationChange = (oldLoc: { lat: number; lng: number }, newLoc: Location): boolean => {
+    const latDiff = Math.abs(oldLoc.lat - newLoc.latitude);
+    const lngDiff = Math.abs(oldLoc.lng - newLoc.longitude);
+    // Approximately 200 meters at equator
+    const threshold = 0.0018; // ~200 meters
+    return latDiff > threshold || lngDiff > threshold;
+  };
+
+  useEffect(() => {
+    if (location) {
+      const currentTime = Date.now();
+
+      // Clear any existing timeout
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
+
+      // Debounce with 2-second delay to avoid excessive API calls
+      fetchTimeoutRef.current = setTimeout(() => {
+        const shouldFetch = !lastFetchLocationRef.current ||
+          isSignificantLocationChange(lastFetchLocationRef.current, location) ||
+          (currentTime - lastFetchLocationRef.current.time) > 60000; // 1 minute minimum
+
+        if (shouldFetch) {
+          const fetchNearbyGroups = async () => {
+            console.log('🔍 [UI FETCH START] Fetching nearby chat groups for location:', {
+              location,
+              timestamp: new Date().toISOString(),
+              currentState: {
+                nearbyGroupsCount: nearbyGroups.length,
+                chatPinsCount: chatPins.length,
+                loadingGroups
+              }
+            });
+            setLoadingGroups(true);
+
+            try {
+                          console.log('🔍 [UI FETCH CALLING] About to call getNearbyChatsGroups...');
+            const groups = await getNearbyChatsGroups(location, 5); // 5km radius
+            console.log('🔍 [UI FETCH RECEIVED] Groups received from service:', {
+              groupsCount: groups.length,
+              groupsData: groups,
+              groupsType: typeof groups,
+              isArray: Array.isArray(groups)
+            });
+
+              setNearbyGroups(groups);
+
+              lastFetchLocationRef.current = {
+                lat: location.latitude,
+                lng: location.longitude,
+                time: currentTime
+              };
+
+              // Convert groups to ChatPin format for map display
+              const pins: ChatPin[] = groups.map((group: ChatGroup) => ({
+                id: group.id,
+                coordinate: {
+                  latitude: group.lat,
+                  longitude: group.lng,
+                },
+                title: group.name,
+                memberCount: group.member_count || 0,
+                description: group.description,
+                distance: group.distance ? `${group.distance.toFixed(1)}km away` : undefined,
+              }));
+
+              console.log('📍 [UI PINS CREATED] Converting groups to map pins:', {
+                groupsCount: groups.length,
+                pinsCount: pins.length,
+                pinsData: pins
+              });
+
+              setChatPins(pins);
+              console.log(`✅ [UI STATE UPDATED] Loaded ${pins.length} nearby chat groups on map`, {
+                nearbyGroups: groups,
+                chatPins: pins,
+                viewMode,
+                loadingGroups: false
+              });
+
+              // Cache the groups for offline/persistence
+              try {
+                const cacheData = {
+                  groups,
+                  timestamp: Date.now(),
+                  location: { latitude: location.latitude, longitude: location.longitude }
+                };
+                await AsyncStorage.setItem(NEARBY_GROUPS_CACHE_KEY, JSON.stringify(cacheData));
+                console.log('💾 [CACHE SAVED] Cached nearby groups for offline access');
+              } catch (cacheError) {
+                console.error('❌ [CACHE FAILED] Failed to cache groups:', cacheError);
+              }
+            } catch (error) {
+              console.error('❌ [UI FETCH FAILED] Failed to fetch nearby groups:', error);
+              // Keep existing data on error to prevent disappearing chats
+              if (nearbyGroups.length === 0) {
+                setChatPins([]);
+                console.log('🔄 [UI ERROR RECOVERY] Set chat pins to empty array due to error');
+              } else {
+                console.log('🔄 [UI ERROR RECOVERY] Keeping existing data:', {
+                  nearbyGroupsCount: nearbyGroups.length,
+                  chatPinsCount: chatPins.length
+                });
+              }
+            } finally {
+              setLoadingGroups(false);
+              console.log('🏁 [UI FETCH COMPLETE] Fetch operation finished', {
+                finalState: {
+                  nearbyGroupsCount: nearbyGroups.length,
+                  chatPinsCount: chatPins.length,
+                  loadingGroups: false
+                }
+              });
+            }
+          };
+
+          fetchNearbyGroups();
+        } else {
+          console.log('⏳ Skipping fetch - location change too small or too recent');
+        }
+      }, 2000); // 2 second debounce
     }
+
+    // Cleanup timeout on unmount
+    return () => {
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
+    };
   }, [location]);
 
   const handleCreateChat = () => {
@@ -164,27 +290,74 @@ const MapScreen: React.FC = () => {
     );
   };
 
-  const handleJoinChat = async (chatData: ChatGroup | ChatPin) => {
+    const handleJoinChat = async (chatData: ChatGroup | ChatPin) => {
     const chatName = ('title' in chatData) ? chatData.title : chatData.name;
-    console.log('🚪 Joining chat:', chatName);
-    
+    const memberCount = 'memberCount' in chatData ? chatData.memberCount : undefined;
+    console.log('🚪 [JOIN CHAT START] Joining chat:', {
+      chatName,
+      chatId: chatData.id,
+      memberCount,
+      anonymousName,
+      joiningChatId,
+      fullChatData: chatData
+    });
+
+    // Prevent multiple join attempts
+    if (joiningChatId === chatData.id) {
+      console.log('🚪 [JOIN CHAT SKIP] Already joining this chat, skipping');
+      return;
+    }
+
+    setJoiningChatId(chatData.id);
+    console.log('🚪 [JOIN CHAT STATE] Set joining state:', {
+      joiningChatId: chatData.id,
+      chatName
+    });
+
     try {
       // Track the join action
+      console.log('🚪 [JOIN CHAT STEP 1] Calling joinChat service...');
       await joinChat(chatData.id, chatName);
+      console.log('🚪 [JOIN CHAT STEP 1 SUCCESS] joinChat completed');
+
+      console.log('🚪 [JOIN CHAT STEP 2] Calling trackChatVisit service...');
       await trackChatVisit(chatData.id, chatName);
-      
-      Alert.alert(
-        '🎉 Joined Successfully!', 
-        `Welcome to "${chatName}"!\n\nYou can now see this chat in your Chats tab. Chat functionality is coming soon. You'll be able to:\n• Send messages\n• Share polls\n• Connect with nearby people\n\nStay tuned! 🚀`,
-        [{ text: 'Got it!', style: 'default' }]
-      );
-      
-      // Future: Navigate to chat room
-      // navigation.navigate('ChatRoom', { groupId: chatData.id });
-      
+      console.log('🚪 [JOIN CHAT STEP 2 SUCCESS] trackChatVisit completed');
+
+      console.log('✅ [JOIN CHAT SUCCESS] Successfully joined chat, preparing navigation', {
+        chatId: chatData.id,
+        chatName,
+        memberCount,
+        navigationParams: {
+          chatGroupId: chatData.id,
+          chatName: chatName,
+          memberCount: memberCount
+        }
+      });
+
+      // Small delay to show feedback before navigation
+      setTimeout(() => {
+        console.log('🚪 [JOIN CHAT NAVIGATE] Navigating to chat screen...');
+        // Navigate directly to the chat screen
+        navigation.navigate('Chat', {
+          chatGroupId: chatData.id,
+          chatName: chatName,
+          memberCount: memberCount
+        });
+        setJoiningChatId(null);
+        console.log('🚪 [JOIN CHAT COMPLETE] Navigation initiated, cleared joining state');
+      }, 300);
+
     } catch (error) {
-      console.error('❌ Failed to join chat:', error);
-      Alert.alert('Error', 'Failed to join chat. Please try again.');
+      console.error('❌ [JOIN CHAT FAILED] Failed to join chat:', {
+        error,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        chatId: chatData.id,
+        chatName
+      });
+      setJoiningChatId(null);
+      console.log('🚪 [JOIN CHAT ERROR CLEANUP] Cleared joining state due to error');
+      Alert.alert('Error', 'Failed to join chat. Please check your connection and try again.');
     }
   };
 
@@ -201,12 +374,26 @@ const MapScreen: React.FC = () => {
           </Text>
         </View>
         
-        <TouchableOpacity 
-          style={styles.createButton} 
+        <TouchableOpacity
+          style={styles.createButton}
           onPress={handleCreateChat}
           activeOpacity={0.8}
         >
           <Text style={styles.createButtonIcon}>+</Text>
+        </TouchableOpacity>
+
+        {/* Temporary debug button */}
+        <TouchableOpacity
+          style={[styles.createButton, { backgroundColor: '#FF4444', marginLeft: 8 }]}
+          onPress={async () => {
+            console.log('🔧 [DEBUG] Testing database connection...');
+            const result = await testDatabaseConnection();
+            console.log('🔧 [DEBUG] Test result:', result);
+            Alert.alert('Debug Result', `Success: ${result.success}\nCount: ${result.count || 0}`);
+          }}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.createButtonIcon}>🔧</Text>
         </TouchableOpacity>
       </View>
 
@@ -234,28 +421,49 @@ const MapScreen: React.FC = () => {
     </View>
   );
 
-  const renderActivityView = () => (
-    <>
-      {loadingGroups ? (
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Finding nearby chats...</Text>
-        </View>
-      ) : nearbyGroups.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>No chats nearby</Text>
-          <Text style={styles.emptyText}>
-            Be the first to start a conversation in this area!
-          </Text>
-          <TouchableOpacity style={styles.createFirstButton} onPress={handleCreateChat}>
-            <Text style={styles.createFirstButtonText}>Create First Chat</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <ScrollView 
+  const renderActivityView = () => {
+    console.log('🎨 [UI RENDER ACTIVITY] Rendering activity view:', {
+      loadingGroups,
+      nearbyGroupsCount: nearbyGroups.length,
+      chatPinsCount: chatPins.length,
+      viewMode,
+      anonymousName
+    });
+
+    return (
+      <>
+        {loadingGroups ? (
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Finding nearby chats...</Text>
+          </View>
+        ) : nearbyGroups.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyTitle}>No chats nearby</Text>
+            <Text style={styles.emptyText}>
+              Be the first to start a conversation in this area!
+            </Text>
+            <TouchableOpacity style={styles.createFirstButton} onPress={handleCreateChat}>
+              <Text style={styles.createFirstButtonText}>Create First Chat</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+                <ScrollView
           style={styles.chatList}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.chatListContent}
         >
+          {(() => {
+            console.log('🎨 [UI RENDER CARDS] Rendering chat cards:', {
+              groupsCount: nearbyGroups.length,
+              groups: nearbyGroups.map(g => ({
+                id: g.id,
+                name: g.name,
+                distance: g.distance?.toFixed(2) + 'km',
+                memberCount: g.member_count
+              }))
+            });
+            return null;
+          })()}
           {nearbyGroups.map((group, index) => (
             <TouchableOpacity
               key={group.id}
@@ -296,9 +504,28 @@ const MapScreen: React.FC = () => {
                     minute: '2-digit'
                   })}
                 </Text>
-                <View style={styles.joinButton}>
-                  <Text style={styles.joinButtonText}>Join</Text>
-                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.joinButton,
+                    joiningChatId === group.id && styles.joinButtonLoading
+                  ]}
+                  onPress={() => handlePinPress({
+                    id: group.id,
+                    coordinate: { latitude: group.lat, longitude: group.lng },
+                    title: group.name,
+                    description: group.description,
+                    memberCount: group.member_count || 0,
+                    distance: group.distance ? `${group.distance.toFixed(1)}km away` : undefined,
+                  })}
+                  disabled={joiningChatId === group.id}
+                >
+                  <Text style={[
+                    styles.joinButtonText,
+                    joiningChatId === group.id && styles.joinButtonTextLoading
+                  ]}>
+                    {joiningChatId === group.id ? 'Joining...' : 'Join'}
+                  </Text>
+                </TouchableOpacity>
               </View>
             </TouchableOpacity>
           ))}
@@ -306,6 +533,7 @@ const MapScreen: React.FC = () => {
       )}
     </>
   );
+  };
 
   if (!hasPermission) {
     return (
@@ -330,8 +558,22 @@ const MapScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      {(() => {
+        console.log('🎨 [UI RENDER MAIN] Main render cycle:', {
+          hasPermission,
+          location: location ? `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}` : 'No location',
+          isAuthenticated,
+          anonymousName,
+          nearbyGroupsCount: nearbyGroups.length,
+          chatPinsCount: chatPins.length,
+          loadingGroups,
+          viewMode,
+          joiningChatId
+        });
+        return null;
+      })()}
       {renderDiscoveryHeader()}
-      
+
       <View style={styles.content}>
         {/* Map View - Always mounted but shown/hidden with display style */}
         <View style={[
@@ -597,10 +839,16 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
   },
+  joinButtonLoading: {
+    backgroundColor: '#CCCCCC',
+  },
   joinButtonText: {
     fontSize: 12,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  joinButtonTextLoading: {
+    color: '#666666',
   },
   
   // Permission Screen Styles
