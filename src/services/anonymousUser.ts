@@ -66,15 +66,32 @@ export const getOrCreateAnonymousUser = async (): Promise<AnonymousUser> => {
   console.log('🔗 Setting device context...');
   await setDeviceContext(deviceId);
   
-  console.log('🔍 Checking for existing user in database...');
+  console.log('🔍 [DB LOOKUP] Checking for existing user in database...', {
+    deviceId: deviceId.substring(0, 10) + '...',
+    query: 'SELECT * FROM anonymous_users WHERE device_id = ?'
+  });
   const { data: existingUser, error: fetchError } = await supabase
     .from('anonymous_users')
     .select('*')
     .eq('device_id', deviceId)
     .single();
-  
+
+  console.log('🔍 [DB LOOKUP RESULT] Database query result:', {
+    success: !fetchError,
+    foundUser: !!existingUser,
+    errorCode: fetchError ? fetchError.code : null,
+    errorMessage: fetchError ? fetchError.message : null,
+    userData: existingUser ? {
+      id: existingUser.id,
+      name: existingUser.generated_name,
+      deviceId: existingUser.device_id.substring(0, 10) + '...',
+      createdAt: existingUser.created_at,
+      lastSeen: existingUser.last_seen
+    } : null
+  });
+
   if (fetchError && fetchError.code !== 'PGRST116') {
-    console.error('❌ Error fetching existing user:', fetchError);
+    console.error('❌ [DB LOOKUP ERROR] Error fetching existing user:', fetchError);
   }
   
   if (existingUser) {

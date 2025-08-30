@@ -19,12 +19,25 @@ export const supabase = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_K
 });
 
 // Test the connection
-supabase.auth.getSession().then(({ error }) => {
+supabase.auth.getSession().then(({ data, error }) => {
   if (error) {
-    console.warn('⚠️ Supabase connection issue:', error.message);
+    console.warn('⚠️ Supabase auth issue:', error.message);
   } else {
-    console.log('🔗 Supabase connected successfully');
+    console.log('🔗 Supabase auth status:', {
+      hasSession: !!data.session,
+      user: data.session?.user?.id ? 'authenticated' : 'anonymous'
+    });
   }
+
+  // Test database connection with a simple query
+  supabase.from('chat_groups').select('count').limit(1).then(({ data: testData, error: testError }) => {
+    if (testError) {
+      console.error('❌ Supabase database connection failed:', testError);
+    } else {
+      console.log('✅ Supabase database connected successfully, found', testData?.[0]?.count || 0, 'chat groups');
+    }
+  });
+
 }).catch((err) => {
   console.warn('⚠️ Failed to test Supabase connection:', err.message);
 });
