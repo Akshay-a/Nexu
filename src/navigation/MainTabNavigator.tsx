@@ -1,6 +1,6 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Platform } from 'react-native';
+import { Platform, Text } from 'react-native';
 
 import { MainTabParamList } from '../types/app';
 import MapScreen from '../screens/MapScreen';
@@ -14,17 +14,29 @@ const MainTabNavigator: React.FC = () => {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#FFF5E5',
-          borderTopColor: '#85DCBA',
-          height: Platform.OS === 'ios' ? 90 : 70,
-          paddingBottom: Platform.OS === 'ios' ? 25 : 10,
-          paddingTop: 10,
+          backgroundColor: '#19323C',
+          borderTopWidth: 0,
+          height: Platform.OS === 'ios' ? 88 : 68,
+          paddingBottom: Platform.OS === 'ios' ? 25 : 8,
+          paddingTop: 12,
+          paddingHorizontal: 20,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 8,
+          elevation: 8,
         },
-        tabBarActiveTintColor: '#19323C',
+        tabBarActiveTintColor: '#FF7E67',
         tabBarInactiveTintColor: '#85DCBA',
         tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '500',
+          fontSize: 11,
+          fontWeight: '600',
+          marginTop: 4,
+        },
+        tabBarItemStyle: {
+          paddingVertical: 4,
+          borderRadius: 12,
+          marginHorizontal: 8,
         },
       }}
     >
@@ -32,15 +44,31 @@ const MainTabNavigator: React.FC = () => {
         name="Map" 
         component={MapScreen}
         options={{
-          tabBarIcon: () => '🗺️',
-          tabBarLabel: 'Map',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Text style={{ 
+              color: focused ? '#FF7E67' : '#85DCBA', 
+              fontSize: 20, 
+              opacity: focused ? 1 : 0.7 
+            }}>
+              🗺️
+            </Text>
+          ),
+          tabBarLabel: 'Discover',
         }}
       />
       <Tab.Screen 
         name="ChatList" 
         component={ChatListScreen}
         options={{
-          tabBarIcon: () => '💬',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Text style={{ 
+              color: focused ? '#FF7E67' : '#85DCBA', 
+              fontSize: 20, 
+              opacity: focused ? 1 : 0.7 
+            }}>
+              💬
+            </Text>
+          ),
           tabBarLabel: 'Chats',
         }}
       />

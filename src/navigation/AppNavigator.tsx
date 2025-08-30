@@ -37,34 +37,43 @@ const AppNavigator: React.FC = () => {
   
   const shouldShowLoading = isLoading && !forceShowApp;
   const shouldShowOnboarding = !hasSeenOnboarding && (!isLoading || forceShowApp);
-  const shouldShowMain = hasSeenOnboarding && (!isLoading || forceShowApp);
   
   console.log('🧭 Navigator decision:', {
     showLoading: shouldShowLoading,
-    showOnboarding: shouldShowOnboarding,
-    showMain: shouldShowMain
+    shouldShowOnboarding: shouldShowOnboarding,
+    hasSeenOnboarding: hasSeenOnboarding
   });
 
   if (shouldShowLoading) {
+    console.log('🧭 Showing LoadingScreen');
     return <LoadingScreen />;
   }
+
+  // Determine initial route based on onboarding status
+  const initialRouteName = shouldShowOnboarding ? 'Onboarding' : 'Main';
+  console.log('🧭 Initial route will be:', initialRouteName);
 
   return (
     <NavigationContainer>
       <StatusBar style="auto" />
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {shouldShowOnboarding ? (
-          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-        ) : (
-          <>
-            <Stack.Screen name="Main" component={MainTabNavigator} />
-            <Stack.Screen 
-              name="Auth" 
-              component={AuthScreen}
-              options={{ presentation: 'modal' }}
-            />
-          </>
-        )}
+      <Stack.Navigator 
+        initialRouteName={initialRouteName}
+        screenOptions={{ headerShown: false }}
+      >
+        <Stack.Screen 
+          name="Onboarding" 
+          component={OnboardingScreen}
+          options={{ 
+            gestureEnabled: false,
+            headerLeft: () => null, // Prevent back navigation
+          }}
+        />
+        <Stack.Screen name="Main" component={MainTabNavigator} />
+        <Stack.Screen 
+          name="Auth" 
+          component={AuthScreen}
+          options={{ presentation: 'modal' }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );
