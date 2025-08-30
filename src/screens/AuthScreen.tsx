@@ -27,24 +27,38 @@ const AuthScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
+    console.log('🔐 Auth form submission started:', { isLogin, email: email ? 'provided' : 'empty' });
+    
     if (!email || !password) {
+      console.warn('⚠️ Auth validation failed: missing fields');
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
+    console.log('🔄 Setting loading state and starting auth...');
     setLoading(true);
+    
     try {
       if (isLogin) {
-        await signIn(email, password);
+        console.log('🔑 Attempting sign in...');
+        const result = await signIn(email, password);
+        console.log('✅ Sign in successful:', { user: result?.user?.email });
         Alert.alert('Success', 'Welcome back!');
       } else {
-        await signUp(email, password);
+        console.log('✨ Attempting sign up...');
+        const result = await signUp(email, password);
+        console.log('✅ Sign up successful:', { user: result?.user?.email });
         Alert.alert('Success', 'Account created! Please check your email for verification.');
       }
+      
+      console.log('🧭 Navigating back from auth screen...');
       navigation.goBack();
     } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Authentication failed');
+      const errorMessage = error instanceof Error ? error.message : 'Authentication failed';
+      console.error('❌ Auth error:', errorMessage);
+      Alert.alert('Error', errorMessage);
     } finally {
+      console.log('🏁 Auth process completed, removing loading state');
       setLoading(false);
     }
   };

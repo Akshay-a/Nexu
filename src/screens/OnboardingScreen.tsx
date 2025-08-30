@@ -15,9 +15,14 @@ const OnboardingScreen: React.FC = () => {
   const handleStartExploring = async () => {
     console.log('🌍 Start Exploring clicked');
     try {
+      console.log('🔄 Completing onboarding...');
       await completeOnboarding();
-      console.log('✅ Onboarding completed, navigating to Main');
+      console.log('✅ Onboarding completed successfully');
+      
+      // Use replace to prevent going back to onboarding
+      console.log('🧭 Navigating to Main screen...');
       navigation.replace('Main');
+      console.log('✅ Navigation to Main completed');
     } catch (error) {
       console.error('❌ Failed to complete onboarding:', error);
     }
@@ -26,9 +31,21 @@ const OnboardingScreen: React.FC = () => {
   const handleSignUp = async () => {
     console.log('👤 Sign Up clicked');
     try {
+      console.log('🔄 Completing onboarding...');
       await completeOnboarding();
-      console.log('✅ Onboarding completed, navigating to Auth');
-      navigation.navigate('Auth');
+      console.log('✅ Onboarding completed successfully');
+      
+      // First navigate to Main, then show Auth modal
+      console.log('🧭 Navigating to Main screen first...');
+      navigation.replace('Main');
+      console.log('✅ Navigation to Main completed');
+      
+      // Small delay to ensure Main screen is mounted before showing Auth modal
+      setTimeout(() => {
+        console.log('🧭 Opening Auth modal...');
+        navigation.navigate('Auth');
+        console.log('✅ Auth modal navigation completed');
+      }, 100);
     } catch (error) {
       console.error('❌ Failed to complete onboarding:', error);
     }
@@ -85,10 +102,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 30,
-    shadowColor: '#FF7E67',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
+    boxShadow: '0px 12px 15px rgba(255, 126, 103, 0.3)',
     elevation: 8,
   },
   logoText: {
@@ -119,10 +133,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 32,
     alignItems: 'center',
-    shadowColor: '#FF7E67',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    boxShadow: '0px 4px 8px rgba(255, 126, 103, 0.2)',
     elevation: 4,
   },
   primaryButtonText: {
