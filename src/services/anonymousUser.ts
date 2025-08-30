@@ -48,31 +48,62 @@ const getStoredDeviceId = async (): Promise<string | null> => {
 };
 
 export const getOrCreateAnonymousUser = async (): Promise<AnonymousUser> => {
+  console.log('👤 Getting or creating anonymous user...');
+  
   let deviceId = await getStoredDeviceId();
+  console.log('📱 Stored device ID:', deviceId ? 'Found' : 'Not found');
   
   if (!deviceId) {
+    console.log('🆕 Generating new device ID...');
     deviceId = generateDeviceId();
+    console.log('📱 Generated device ID:', deviceId);
     await storeDeviceId(deviceId);
+    console.log('💾 Device ID stored successfully');
+  } else {
+    console.log('♻️ Using existing device ID:', deviceId);
   }
   
+  console.log('🔗 Setting device context...');
   await setDeviceContext(deviceId);
   
-  const { data: existingUser } = await supabase
+  console.log('🔍 Checking for existing user in database...');
+  const { data: existingUser, error: fetchError } = await supabase
     .from('anonymous_users')
     .select('*')
     .eq('device_id', deviceId)
     .single();
   
+  if (fetchError && fetchError.code !== 'PGRST116') {
+    console.error('❌ Error fetching existing user:', fetchError);
+  }
+  
   if (existingUser) {
-    await supabase
+    console.log('✅ Found existing anonymous user:', {
+      name: existingUser.generated_name,
+      created: existingUser.created_at,
+      lastSeen: existingUser.last_seen
+    });
+    
+    console.log('🔄 Updating last seen timestamp...');
+    const { error: updateError } = await supabase
       .from('anonymous_users')
       .update({ last_seen: new Date().toISOString() })
       .eq('device_id', deviceId);
     
+    if (updateError) {
+      console.warn('⚠️ Failed to update last seen:', updateError);
+    } else {
+      console.log('✅ Last seen updated successfully');
+    }
+    
+    console.log('🎭 Returning existing anonymous user:', existingUser.generated_name);
     return existingUser;
   }
   
+  console.log('🎭 Creating new anonymous user...');
   const generatedName = generateAnonymousName(deviceId);
+  console.log('🎨 Generated name:', generatedName);
+  
   const { data: newUser, error } = await supabase
     .from('anonymous_users')
     .insert({
@@ -83,8 +114,15 @@ export const getOrCreateAnonymousUser = async (): Promise<AnonymousUser> => {
     .single();
   
   if (error) {
+    console.error('❌ Failed to create anonymous user:', error);
     throw new Error(`Failed to create anonymous user: ${error.message}`);
   }
+  
+  console.log('✅ New anonymous user created:', {
+    name: newUser.generated_name,
+    deviceId: newUser.device_id,
+    created: newUser.created_at
+  });
   
   return newUser;
 };
