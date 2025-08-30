@@ -69,8 +69,9 @@ CREATE TABLE public.chat_groups (
 ALTER TABLE chat_groups ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for chat_groups
-CREATE POLICY "Anyone can view chat groups" ON public.chat_groups
-  FOR SELECT USING (true);
+-- Allow anyone to view active chat groups (including anonymous users)
+CREATE POLICY "Anyone can view active chat groups" ON public.chat_groups
+  FOR SELECT USING (is_active = true);
 
 CREATE POLICY "Authenticated users can create chat groups" ON public.chat_groups
   FOR INSERT WITH CHECK (auth.uid() IS NOT NULL AND auth.uid() = creator_id);
@@ -379,6 +380,24 @@ $$ LANGUAGE plpgsql;
 -- 5. Call check_message_rate_limit() before inserting messages
 -- 6. ADDED: Update last_seen for anonymous users on app activity
 -- 7. POLLS: Use vote_on_poll() function for voting, get_poll_results() for results
+
+-- =====================================================
+-- Test function to bypass RLS for debugging
+-- =====================================================
+CREATE OR REPLACE FUNCTION get_nearby_chats_test(user_lat DOUBLE PRECISION, user_lng DOUBLE PRECISION, radius_km DOUBLE PRECISION DEFAULT 5)
+RETURNS TABLE(id UUID, name TEXT, lat DOUBLE PRECISION, lng DOUBLE PRECISION, is_active BOOLEAN, last_activity TIMESTAMPTZ)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT cg.id, cg.name, cg.lat, cg.lng, cg.is_active, cg.last_activity
+  FROM chat_groups cg
+  WHERE cg.is_active = true
+  ORDER BY cg.last_activity DESC
+  LIMIT 10;
+END;
+$$;
 
 -- =====================================================
 -- End of Migration Script
